@@ -1,8 +1,13 @@
-import requests
+from pathlib import Path
+import joblib
+import numpy as np
 import pandas as pd
 import streamlit as st
 
-API_URL = "http://127.0.0.1:8000"
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_PATH = BASE_DIR / "backend" / "model.pkl"
+
+model = joblib.load(MODEL_PATH)
 FEATURES = [
     "num_rooms", "num_people", "housearea", "is_ac", "is_tv",
     "is_flat", "ave_monthly_income", "num_children", "is_urban"
@@ -70,16 +75,16 @@ div[data-testid="stForm"], div[data-testid="stExpander"] {{ border: 1px solid {b
 
 # ---------- Helpers ----------
 def call_prediction(payload):
-    """Call the existing FastAPI endpoint using the same feature names as the model."""
-    response = requests.post(f"{API_URL}/predict", json=payload, timeout=15)
-    if response.status_code == 200:
-        data = response.json()
-        return float(data["predicted_amount"]), data.get("note", "")
-    try:
-        detail = response.json().get("detail", "Prediction service returned an error.")
-    except ValueError:
-        detail = response.text or "Prediction service returned an error."
-    raise RuntimeError(f"API error ({response.status_code}): {detail}")
+    """Run the trained model directly inside Streamlit."""
+    row = [[payload[feature] for feature in FEATURES]]
+    prediction = float(model.predict(row)[0])
+
+    if not np.isfinite(prediction):
+        raise ValueError("The model returned a non-finite value.")
+
+    return round(max(0.0, prediction), 2), (
+        "This is an estimate from the trained model, not an official utility bill."
+    )
 
 def money(value):
     return f"₹{value:,.2f}"
@@ -113,21 +118,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API status check
-status_col1, status_col2 = st.columns([3, 1])
-with status_col1:
-    st.caption("A prediction requires the FastAPI backend to be running locally.")
-with status_col2:
-    if st.button("Check API status", use_container_width=True):
-        try:
-            health = requests.get(f"{API_URL}/health", timeout=3).json()
-            if health.get("status") == "ok" and health.get("model_loaded"):
-                st.success("API and model are available.")
-            elif health.get("status") == "ok":
-                st.warning("API is running, but the model file is missing.")
-            else:
-                st.warning(f"API response: {health}")
-        except requests.RequestException:
-            st.error("Cannot reach FastAPI. Start the backend first.")
+st.caption("Prediction model is loaded directly from the deployed application.")
 
 tab_predict, tab_explore, tab_model = st.tabs(
     ["⚡ Predict bill", "📊 Explore scenarios", "🧠 Model insights"]

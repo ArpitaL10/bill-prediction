@@ -1,8 +1,5 @@
-fastapi
-uvicorn[standard]
 streamlit
-requests
-joblib
-numpy
-scikit-learn
 pandas
+numpy
+joblib
+scikit-learn
